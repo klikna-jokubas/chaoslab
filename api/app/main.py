@@ -21,6 +21,20 @@ monitor_state = {
 def timestamp():
     return datetime.now(timezone.utc).isoformat()
 
+async def attempt_recovery(client: httpx.AsyncClient) -> bool:
+    try:
+        response = await client.post(
+            "http://worker:8001/chaos/recover"
+        )
+        response.raise_for_status()
+
+        print("Recovery action completed successfully")
+        return True
+
+    except httpx.HTTPError as error:
+        print(f"Recovery attempt failed: {error}")
+        return False
+
 
 async def monitor_worker():
     global active_incident
@@ -64,6 +78,9 @@ async def monitor_worker():
                     f"INCIDENT #{active_incident['id']}: "
                     f"worker is {status}"
                 )
+
+                print("Attempting automatic recovery...")
+                await attempt_recovery(client)
 
             # Resolve the active incident after recovery.
             elif status == "healthy" and active_incident is not None:
@@ -115,3 +132,22 @@ def get_monitor_status():
 @app.get("/incidents")
 def get_incidents():
     return incidents
+
+
+@app.post("/recovery/worker")
+async def recover_worker():
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        try:
+            response = await client.post(
+                "http://worker:8001/chaos/recover"
+            )
+            response.raise_for_status()
+            return {
+                "message": "Worker recovery requested",
+                "worker_response": response.json(),
+            }
+        except httpx.HTTPError as error:
+            return {
+                "message": "Worker recovery failed",
+                "error": str(error),
+            }
