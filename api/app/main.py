@@ -71,6 +71,8 @@ async def monitor_worker():
                     "status": "open",
                     "detected_at": timestamp(),
                     "resolved_at": None,
+                    "recovery_attempts": 0,
+                    "recovery_result": None,
                 }
                 incidents.append(active_incident)
 
@@ -80,7 +82,14 @@ async def monitor_worker():
                 )
 
                 print("Attempting automatic recovery...")
-                await attempt_recovery(client)
+
+                active_incident["recovery_attempts"] += 1
+
+                recovery_succeeded = await attempt_recovery(client)
+
+                active_incident["recovery_result"] = (
+                    "success" if recovery_succeeded else "failed"
+                )
 
             # Resolve the active incident after recovery.
             elif status == "healthy" and active_incident is not None:
